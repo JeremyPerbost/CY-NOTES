@@ -40,9 +40,9 @@ void calculer_MOYENNE() {
     std::string ligne;
     std::string nomUE = "";
     std::vector<Matiere> matieresDeLUE;
-    std::vector<std::string> rattrapages, simulations, ueNonValidees;
+    std::vector<std::string> rattrapages, simulations, worstCases;
     
-    double sommeToutesMoyennes = 0.0; // Inclut reelles + predictions
+    double sommeToutesMoyennes = 0.0; 
     int nombreTotalUE = 0;
 
     auto traiterFinUE = [&]() {
@@ -71,13 +71,15 @@ void calculer_MOYENNE() {
         nombreTotalUE++;
 
         if (!nomsInconnus.empty()) {
-            // UE avec prediction
+            // 1. Calcul de l'objectif (pour avoir 10)
             double noteRequise = (10.0 * sommeCoeffTotal - sommeNotesCoeff) / sommeCoeffInconnus;
             double noteFinale = std::max(6.00, noteRequise);
-            
-            // Si on simule la reussite, la moyenne de cette UE sera au moins 10 (ou plus si les notes deja la sont tres hautes)
             double moyennePredite = std::max(10.0, (sommeNotesCoeff + (noteFinale * sommeCoeffInconnus)) / sommeCoeffTotal);
             sommeToutesMoyennes += moyennePredite;
+
+            // 2. WORST CASE SCENARIO (Si l'etudiant a 6.00 partout ou il y a un ?)
+            double moyenneWorstCase = (sommeNotesCoeff + (6.00 * sommeCoeffInconnus)) / sommeCoeffTotal;
+            std::string statusWC = (moyenneWorstCase >= 10.0) ? "VALIDE" : "ECHEC";
 
             std::cout << "Moyenne " << nomUE << " (predictions) : " << formater(moyennePredite) << std::endl;
             exportFile << "Moyenne " << nomUE << " (predictions) : " << formater(moyennePredite) << "\n";
@@ -87,22 +89,21 @@ void calculer_MOYENNE() {
                 listeMatieres += nomsInconnus[i] + (i == nomsInconnus.size() - 1 ? "" : ", ");
             }
 
+            // Stockage simulation objectif
             std::string msg = "Pour valider " + nomUE + ", il faut au moins " + formater(noteFinale) + " en [" + listeMatieres + "]";
-            if (aNoteEliminatoire) msg += " (ATTENTION: UE compromise par une note < 6)";
-            else if (noteRequise < 6.00) msg += " (Note de securite: 6.00 impose)";
-            
+            if (aNoteEliminatoire) msg += " (UE compromise par une note < 6)";
             simulations.push_back(msg);
+
+            // Stockage Worst Case
+            worstCases.push_back(nomUE + " : " + formater(moyenneWorstCase) + "/20 [" + statusWC + "] (avec 6/20 partout)");
         } 
         else {
-            // UE terminee
             double moyenne = sommeNotesCoeff / sommeCoeffTotal;
             sommeToutesMoyennes += moyenne;
-
             std::cout << "Moyenne " << nomUE << " : " << formater(moyenne) << std::endl;
             exportFile << "Moyenne " << nomUE << " : " << formater(moyenne) << "\n";
 
             if (moyenne < 10.0) {
-                ueNonValidees.push_back("L'UE [" + nomUE + "] non validee (" + formater(moyenne) + ")");
                 for (const auto& m : matieresDeLUE) 
                     if (m.note >= 6.0 && m.note < 10.0)
                         rattrapages.push_back(m.nom + " [" + nomUE + "] : " + formater(m.note) + " (UE non validee)");
@@ -125,15 +126,21 @@ void calculer_MOYENNE() {
     traiterFinUE();
 
     double moyenneGenerale = (nombreTotalUE > 0) ? (sommeToutesMoyennes / nombreTotalUE) : 0.0;
-    
     auto imprimer = [&](std::string t) { std::cout << t << std::endl; exportFile << t << "\n"; };
 
+    imprimer("\n--- BILAN GENERAL ---");
     imprimer("Moyenne Generale (incluant predictions) : " + formater(moyenneGenerale));
     
     if (!simulations.empty()) {
-        imprimer("\n[OBJECTIFS]");
+        imprimer("\n[OBJECTIFS POUR VALIDER]");
         for (const auto& s : simulations) imprimer("-> " + s);
     }
+
+    if (!worstCases.empty()) {
+        imprimer("\n[WORST CASE SCENARIO]");
+        for (const auto& wc : worstCases) imprimer("- " + wc);
+    }
+
     if (!rattrapages.empty()) {
         imprimer("\n[ALERTES ET RATTRAPAGES]");
         for (const auto& r : rattrapages) imprimer("- " + r);
